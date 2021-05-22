@@ -1,0 +1,10 @@
+{
+  "name": "not-a-dot",
+  "description": "Not a Dot",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "devDependencies": {
+    "express": "^4.17.1"
+  }
+}
