@@ -101,6 +101,17 @@ var App = (function() {
     return number.toLocaleString();
   }
 
+  // https://stackoverflow.com/questions/14614252/how-to-fit-camera-to-object
+  function getCameraDistanceToFitDimensions(camera, width, height){
+    // Convert camera fov degrees to radians
+    var fov = camera.fov * ( Math.PI / 180 );
+
+    // Calculate the camera distance
+    var size = Math.max(width, height);
+    var distance = Math.abs( size / Math.sin( fov / 2 ) );
+    return distance;
+  }
+
   function lerp(a, b, t) {
     return (1.0*b - a) * t + a;
   }
@@ -129,6 +140,26 @@ var App = (function() {
     return {};
   }
 
+  // https://discourse.threejs.org/t/functions-to-calculate-the-visible-width-height-at-a-given-z-depth-from-a-perspective-camera/269
+  function visibleDimensionsAtDepth(depth, camera) {
+    // compensate for cameras not positioned at z=0
+    var cameraOffset = camera.position.z;
+    if ( depth < cameraOffset ) depth -= cameraOffset;
+    else depth += cameraOffset;
+
+    // vertical fov in radians
+    var vFOV = camera.fov * Math.PI / 180;
+
+    // Math.abs to ensure the result is always positive
+    var height = 2 * Math.tan( vFOV / 2 ) * Math.abs( depth );
+    var width = height * camera.aspect;
+
+    return {
+      width: width,
+      height: height
+    };
+  }
+
   App.prototype.init = function(){
     var _this = this;
     this.$el = $('#app');
@@ -137,6 +168,37 @@ var App = (function() {
     this.loadSound();
     this.loadSlider();
     this.loadScene();
+    this.loadPeople();
+    this.loadListeners();
+  };
+
+  App.prototype.loadListeners = function(){
+    var _this = this;
+
+    $(window).on('resize', function(){
+      _this.onResize();
+    });
+  };
+
+  App.prototype.loadPeople = function(){
+
+  };
+
+  App.prototype.loadScene = function(){
+    var $el = this.$scene;
+    var w = $el.width();
+    var h = $el.height();
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera( 75, w / h, 0.0001, this.opt.cameraDistance * 2 );
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio( window.devicePixelRatio );
+    renderer.setClearColor( 0x000000, 0.0 );
+    renderer.setSize(w, h);
+    $el.append(renderer.domElement);
+
+    this.camera = camera;
+    this.renderer = renderer;
+    this.renderNeeded = true;
   };
 
   App.prototype.loadSlider = function(){
@@ -160,19 +222,6 @@ var App = (function() {
     });
   };
 
-  App.prototype.loadScene = function(){
-    var $el = $('#scene');
-    var w = $el.width();
-    var h = $el.height();
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera( 75, w / h, 0.0001, 8000 );
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio( window.devicePixelRatio );
-    renderer.setClearColor( 0x000000, 0.0 );
-    renderer.setSize(w, h);
-    $el.append(renderer.domElement);
-  };
-
   App.prototype.loadSound = function(){
     var sound = new Howl({
       src: [this.opt.audioFile]
@@ -182,6 +231,17 @@ var App = (function() {
       sound.volume(_.random(0.5, 1));
       sound.play()
     }, this.opt.waitAudioMs);
+  };
+
+  App.prototype.onResize = function(){
+    var $el = this.$scene;
+    var w = $el.width();
+    var h = $el.height();
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+
+    this.renderNeeded = true;
   };
 
   App.prototype.onSlide = function(newValue, playSound){
