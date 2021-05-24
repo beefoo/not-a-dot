@@ -3,15 +3,10 @@
 var MaterialVertexShader = `
   precision mediump float;
 
-  uniform float positionTransitionPct;
-  uniform float alphaTransitionPct;
-
   attribute vec2 uvOffset;
   attribute float alpha;
-  attribute float alphaDest;
   attribute vec3 scale;
   attribute vec3 translate;
-  attribute vec3 translateDest;
   attribute vec3 actualSize;
   attribute vec3 color;
 
@@ -22,53 +17,32 @@ var MaterialVertexShader = `
 
   #define PI 3.14159
   void main() {
-    float pPct = positionTransitionPct;
-    if (pPct > 1.0) pPct = 1.0;
-
-    vec3 p = mix( translate, translateDest, pPct );
+    vec3 p = translate;
     vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
     mvPosition.xyz += position * actualSize;
     vUv = uvOffset.xy + uv * actualSize.xy / scale.xy;
 
-    float aPct = alphaTransitionPct;
-    if (aPct > 1.0) aPct = 1.0;
-    vAlpha = (alphaDest-alpha) * aPct + alpha;
-
     // move the point far away if alpha zero
-    if (vAlpha <= 0.0) {
+    if (alpha <= 0.0) {
       p = vec3(-999999., -999999., -999999.);
     }
-
-    vColor = color;
 
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
+// https://stackoverflow.com/questions/31037195/three-js-custom-shader-and-png-texture-with-transparency
 var MaterialFragmentShader = `
   precision mediump float;
 
   uniform sampler2D map;
-  uniform vec3 fogColor;
-  uniform float fogDistance;
 
   varying vec2 vUv;
-  varying vec3 vColor;
-  varying float vAlpha;
 
   void main() {
-  if( length( vColor ) < .1 )discard;
-
-  //fog
-  float depth = gl_FragCoord.z / gl_FragCoord.w;
-  float d = clamp( 0., 1., pow( depth * ( 1./fogDistance ), 2. ) );
-  if( d >= 1. ) discard;
-
-  vec4 diffuseColor = texture2D(map, vUv);
-  gl_FragColor = diffuseColor * vec4(vColor, 1.0);
-  gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, d );
-  gl_FragColor.a = vAlpha;
-}
+    gl_FragColor = texture2D(map, vUv);
+    if ( gl_FragColor.a < 0.5 ) discard;
+  }
 `;
 
 var App = (function() {
@@ -86,7 +60,12 @@ var App = (function() {
       textureHeight: 2048,
       cellWidth: 256,
       cellHeight: 256,
-      cellCount: 42
+      cellDepth: 128,
+      targetCellW: 24,
+      targetCellH: 24,
+      cellCount: 42,
+      maxRotateDelta: Math.PI / 8,
+      rotateSpeed: 0.05
     };
     var q = queryParams();
     this.opt = _.extend({}, defaults, config, q);
@@ -165,8 +144,11 @@ var App = (function() {
     this.$el = $('#app');
     this.$scene = $('#scene');
 
+    this.npointer = new THREE.Vector2();
+
     this.loadSound();
     this.loadSlider();
+    this.loadPositions(this.opt.maxValue);
     this.loadScene();
     this.loadPeople();
     this.loadListeners();
@@ -178,10 +160,163 @@ var App = (function() {
     $(window).on('resize', function(){
       _this.onResize();
     });
+
+    $(document).on("mousemove", function(e){
+      _this.onPointChange(e.pageX, e.pageY);
+    });
+
+    var el = this.$scene[0];
+    var mc = new Hammer(el);
+    mc.get('pan').set({ direction: Hammer.DIRECTION_ALL });
+    mc.on("panstart panmove press", function(e) {
+      _this.onPointChange(e.center.x, e.center.y);
+    });
+  };
+
+  App.prototype.loadPositions = function(count){
+    var positions = [];
+
+    for (var i=0; i<count; i++) {
+      var nx = Math.random();
+      var ny = Math.random();
+      var nz = Math.random();
+      var a = nx - 0.5;
+      var b = ny - 0.5;
+      var dist = Math.sqrt( a*a + b*b );
+      positions.push([nx, ny, nz, dist]);
+    }
+
+    // sort by distance from center
+    positions = _.sortBy(positions, function(p){ return p[3]; });
+
+    // calculate extents (width/height of all objects) at each step
+    var nPositionArr = new Float32Array(count * 3);
+    var extentsArr = new Float32Array(count * 2);
+    var maxX = 0, maxY = 0;
+    for (var i=0; i<count; i++) {
+      var p = positions[i];
+      nPositionArr[i*3] = p[0];
+      nPositionArr[i*3 + 1] = p[1];
+      nPositionArr[i*3 + 2] = p[2];
+
+      maxX = Math.max(maxX, Math.abs(p[0]-0.5)); // max x distance from center
+      maxY = Math.max(maxY, Math.abs(p[1]-0.5)); // max y distance from center
+      extentsArr[i*2] = maxX * 2;
+      extentsArr[i*2 + 1] = maxY * 2;
+    };
+
+    this.nPositionArr = nPositionArr;
+    this.extentsArr = extentsArr;
   };
 
   App.prototype.loadPeople = function(){
+    var _this = this;
+    var scene = this.scene;
+    var imageW = this.opt.textureWidth;
+    var cellW = this.opt.cellWidth;
+    var cellH = this.opt.cellHeight;
+    var targetCellW = this.opt.targetCellW;
+    var targetCellH = this.opt.targetCellH;
+    var count = this.opt.maxValue;
+    var cellCount = this.opt.cellCount;
+    var cols = parseInt(imageW / cellW);
+    var scale = targetCellW / cellW;
 
+    var planeGeom = new THREE.PlaneBufferGeometry(1, 1);
+    var geometry = new THREE.InstancedBufferGeometry();
+    geometry.copy(planeGeom);
+    geometry.instanceCount = count;
+    var uvAttr = geometry.getAttribute('uv');
+    uvAttr.needsUpdate = true;
+    for (var i = 0; i < uvAttr.array.length; i++) {
+      uvAttr.array[i] /= imageW;
+    }
+
+    // define the shader attributes
+    var attributes = [
+      {name: 'uvOffset', size: 2},
+      {name: 'scale', size: 3},
+      {name: 'translate', size: 3},
+      {name: 'alpha', size: 1},
+      {name: 'actualSize', size: 3}
+    ];
+    for (var attr of attributes) {
+      // allocate the buffer
+      var buffer = new Float32Array(geometry.instanceCount * attr.size);
+      var buffAttr = new THREE.InstancedBufferAttribute(buffer, attr.size, false, 1);
+      buffAttr.setUsage(THREE.DynamicDrawUsage);
+      geometry.setAttribute(attr.name, buffAttr);
+    }
+
+    // set alpha to zero
+    var alphaArr = geometry.getAttribute('alpha').array;
+    for (var i=0; i<count; i++) {
+      alphaArr[i] = 1;
+    }
+
+    // set uv offset to random cell
+    var uvOffsetArr = geometry.getAttribute('uvOffset').array;
+    var yt = 1.0 / cols;
+    for (var i=0; i<count; i++) {
+      var randomIndex = _.random(0, cellCount-1);
+      var i0 = i*2;
+      var y = parseInt(randomIndex / cols) / cols;
+      var x = (randomIndex % cols) / cols;
+      uvOffsetArr[i0] = x;
+      uvOffsetArr[i0 + 1] = Math.max(1.0 - y - yt, 0.0);
+    }
+
+    // set size, scale, and translate
+    var visibleW = this.visibleDimensions.width;
+    var visibleH = this.visibleDimensions.height;
+    var visibleDepth = Math.min(visibleH, visibleW);
+    // visibleDepth = 256;
+    var nPositionArr = this.nPositionArr;
+    var sizeArr = geometry.getAttribute('actualSize').array;
+    var scaleArr = geometry.getAttribute('scale').array;
+    var translateArr = geometry.getAttribute('translate').array;
+    for (var i=0; i<count; i++) {
+      var i0 = i*3;
+      sizeArr[i0] = targetCellW;
+      sizeArr[i0+1] = targetCellH;
+      sizeArr[i0+2] = 1;
+      scaleArr[i0] = scale;
+      scaleArr[i0+1] = scale;
+      scaleArr[i0+2] = 1;
+      translateArr[i0] = lerp(-visibleW*0.5, visibleW*0.5, nPositionArr[i0]);
+      translateArr[i0+1] = lerp(-visibleH*0.5, visibleH*0.5, nPositionArr[i0+1]);
+      translateArr[i0+2] = lerp(-visibleDepth, 0, nPositionArr[i0+2]);
+    }
+
+    for (var attr of attributes) {
+      geometry.getAttribute(attr.name).needsUpdate = true
+    }
+
+    // load texture
+    var textureLoader = new THREE.TextureLoader();
+    var texture = textureLoader.load(this.opt.textureFile, function() {
+      console.log('Loaded texture');
+
+      // load material
+      var material = new THREE.ShaderMaterial({
+        uniforms: {
+          map: {type: "t", value: texture }
+        },
+        vertexShader: MaterialVertexShader,
+        fragmentShader: MaterialFragmentShader,
+        blending: THREE.NormalBlending,
+        // depthTest: false,
+        // depthWrite: false,
+        transparent: true
+      });
+      var mesh = new THREE.Mesh(geometry, material);
+      mesh.frustumCulled = false;
+
+      scene.add(mesh);
+      console.log('Mesh loaded');
+
+      _this.render();
+    });
   };
 
   App.prototype.loadScene = function(){
@@ -189,15 +324,37 @@ var App = (function() {
     var w = $el.width();
     var h = $el.height();
     var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera( 75, w / h, 0.0001, this.opt.cameraDistance * 2 );
-    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    var camera = new THREE.PerspectiveCamera( 75, w / h, 1, 10000 );
+    var renderer = new THREE.WebGLRenderer({
+      antialias: true
+    });
+    var anchor = new THREE.Vector3();
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setClearColor( 0x000000, 0.0 );
     renderer.setSize(w, h);
     $el.append(renderer.domElement);
 
+    this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, camera);
+    console.log('Visible dimensions: ' + this.visibleDimensions.width + ' x ' + this.visibleDimensions.height);
+    camera.position.set(0, 0, this.opt.cameraDistance);
+    camera.lookAt(anchor);
+
+    var maxRotateDelta = this.opt.maxRotateDelta;
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+    controls.minPolarAngle = Math.PI * 0.5 - maxRotateDelta; // radians
+  	controls.maxPolarAngle = Math.PI * 0.5 + maxRotateDelta; // radians
+  	controls.minAzimuthAngle = -maxRotateDelta; // radians
+  	controls.maxAzimuthAngle = maxRotateDelta; // radians
+    controls.rotateSpeed = this.opt.rotateSpeed;
+
+    this.viewW = w;
+    this.viewH = h;
+    this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
+    this.anchor = anchor;
+    this.controls = controls;
     this.renderNeeded = true;
   };
 
@@ -240,8 +397,19 @@ var App = (function() {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.viewW = w;
+    this.viewH = h;
+
+    this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, this.camera);
 
     this.renderNeeded = true;
+  };
+
+  App.prototype.onPointChange = function(pageX, pageY){
+    var nx = pageX / this.viewW;
+    var ny = pageY / this.viewH;
+    this.npointer.x = nx * 2 - 1;
+    this.npointer.y = -ny * 2 + 1;
   };
 
   App.prototype.onSlide = function(newValue, playSound){
@@ -264,6 +432,34 @@ var App = (function() {
     this.currentValue = newValue;
 
     if (playSound) this.throttleSound();
+  };
+
+  App.prototype.render = function(){
+    var _this = this;
+
+    // this.moveCameraWithPointer();
+    this.renderer.render(this.scene, this.camera);
+    this.controls.update();
+
+    requestAnimationFrame(function(){
+      _this.render();
+    });
+  };
+
+  App.prototype.moveCameraWithPointer = function(){
+    var anchor = this.anchor;
+    var camera = this.camera;
+
+    var lookDistance = this.opt.lookDistance;
+    var lookDelta = lookDistance * this.camera.position.z;
+    lookDelta = 0.0001;
+
+    var deltaX = this.npointer.x * lookDelta;
+    var deltaY = this.npointer.y * lookDelta;
+
+    camera.position.setX(deltaX);
+    camera.position.setY(deltaY);
+    camera.lookAt(anchor);
   };
 
   return App;
