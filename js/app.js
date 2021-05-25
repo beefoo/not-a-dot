@@ -36,11 +36,22 @@ var MaterialFragmentShader = `
   precision mediump float;
 
   uniform sampler2D map;
+  uniform vec3 fogColor;
+  uniform float fogDistance;
 
   varying vec2 vUv;
 
   void main() {
-    gl_FragColor = texture2D(map, vUv);
+    //fog
+    float depth = gl_FragCoord.z / gl_FragCoord.w;
+    float d = clamp( 0., 1., pow( depth * ( 1./fogDistance ), 2. ) );
+    if( d >= 1. ) discard;
+
+    vec4 diffuseColor = texture2D(map, vUv);
+    gl_FragColor = diffuseColor;
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, d );
+    // gl_FragColor.a = vAlpha;
+
     if ( gl_FragColor.a < 0.5 ) discard;
   }
 `;
@@ -61,8 +72,8 @@ var App = (function() {
       cellWidth: 256,
       cellHeight: 256,
       cellDepth: 128,
-      targetCellW: 24,
-      targetCellH: 24,
+      targetCellW: 64,
+      targetCellH: 64,
       cellCount: 42,
       maxRotateDelta: Math.PI / 8,
       rotateSpeed: 0.05
@@ -300,7 +311,10 @@ var App = (function() {
       // load material
       var material = new THREE.ShaderMaterial({
         uniforms: {
-          map: {type: "t", value: texture }
+          map: {type: "t", value: texture },
+          // fog
+          fogColor: {type: "v3", value: new THREE.Vector3()},
+          fogDistance: {type: "f", value: 8000}
         },
         vertexShader: MaterialVertexShader,
         fragmentShader: MaterialFragmentShader,
