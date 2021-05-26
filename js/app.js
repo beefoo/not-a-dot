@@ -28,6 +28,7 @@ var MaterialVertexShader = `
     }
 
     gl_Position = projectionMatrix * mvPosition;
+    vAlpha = alpha;
   }
 `;
 
@@ -40,6 +41,7 @@ var MaterialFragmentShader = `
   uniform float fogDistance;
 
   varying vec2 vUv;
+  varying float vAlpha;
 
   void main() {
     //fog
@@ -52,7 +54,7 @@ var MaterialFragmentShader = `
     gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, d );
     // gl_FragColor.a = vAlpha;
 
-    if ( gl_FragColor.a < 0.5 ) discard;
+    if ( gl_FragColor.a < 0.5 || vAlpha < 0.1) discard;
   }
 `;
 
@@ -63,6 +65,7 @@ var App = (function() {
       minValue: 1,
       maxValue: 1000000,
       number: 500000,
+      minCameraDistance: 100,
       cameraDistance: 4000,
       audioFile: 'audio/octave/tap-resonant.mp3',
       waitAudioMs: 40, // wait this long before playing sound again
@@ -76,7 +79,10 @@ var App = (function() {
       targetCellH: 64,
       cellCount: 42,
       maxRotateDelta: Math.PI / 8,
-      rotateSpeed: 0.05
+      rotateSpeed: 0.05,
+      transitionInDuration: 500,
+      cameraMoveDuration: 1000,
+      visibleDepth: 512
     };
     var q = queryParams();
     this.opt = _.extend({}, defaults, config, q);
@@ -85,6 +91,10 @@ var App = (function() {
 
   function ease(t){
     return (Math.sin((t+1.5)*Math.PI)+1.0) / 2.0;
+  }
+
+  function easeOutExp(x, exp) {
+    return 1 - Math.pow(1 - x, exp);
   }
 
   function formatNumber(number) {
@@ -97,7 +107,7 @@ var App = (function() {
     var fov = camera.fov * ( Math.PI / 180 );
 
     // Calculate the camera distance
-    var size = Math.max(width, height);
+    var size = Math.min(width, height);
     var distance = Math.abs( size / Math.sin( fov / 2 ) );
     return distance;
   }
@@ -161,8 +171,13 @@ var App = (function() {
     this.loadSlider();
     this.loadPositions(this.opt.maxValue);
     this.loadScene();
-    this.loadPeople();
+    var ready = this.loadPeople();
     this.loadListeners();
+
+    $.when(ready).done(function(){
+      _this.transitionIn();
+      _this.render();
+    });
   };
 
   App.prototype.loadListeners = function(){
@@ -172,15 +187,8 @@ var App = (function() {
       _this.onResize();
     });
 
-    $(document).on("mousemove", function(e){
-      _this.onPointChange(e.pageX, e.pageY);
-    });
-
-    var el = this.$scene[0];
-    var mc = new Hammer(el);
-    mc.get('pan').set({ direction: Hammer.DIRECTION_ALL });
-    mc.on("panstart panmove press", function(e) {
-      _this.onPointChange(e.center.x, e.center.y);
+    $('.toggle-panel').on('click', function(e){
+      _this.toggle($(this));
     });
   };
 
@@ -262,7 +270,7 @@ var App = (function() {
     // set alpha to zero
     var alphaArr = geometry.getAttribute('alpha').array;
     for (var i=0; i<count; i++) {
-      alphaArr[i] = 1;
+      alphaArr[i] = 0;
     }
 
     // set uv offset to random cell
@@ -280,7 +288,7 @@ var App = (function() {
     // set size, scale, and translate
     var visibleW = this.visibleDimensions.width;
     var visibleH = this.visibleDimensions.height;
-    var visibleDepth = Math.min(visibleH, visibleW);
+    var visibleDepth = Math.min(visibleH, visibleW, this.opt.visibleDepth);
     // visibleDepth = 256;
     var nPositionArr = this.nPositionArr;
     var sizeArr = geometry.getAttribute('actualSize').array;
@@ -302,9 +310,11 @@ var App = (function() {
     for (var attr of attributes) {
       geometry.getAttribute(attr.name).needsUpdate = true
     }
+    this.geometry = geometry;
 
     // load texture
     var textureLoader = new THREE.TextureLoader();
+    var promise = $.Deferred();
     var texture = textureLoader.load(this.opt.textureFile, function() {
       console.log('Loaded texture');
 
@@ -329,8 +339,10 @@ var App = (function() {
       scene.add(mesh);
       console.log('Mesh loaded');
 
-      _this.render();
+      promise.resolve();
     });
+
+    return promise;
   };
 
   App.prototype.loadScene = function(){
@@ -339,6 +351,7 @@ var App = (function() {
     var h = $el.height();
     var scene = new THREE.Scene();
     var camera = new THREE.PerspectiveCamera( 75, w / h, 1, 10000 );
+    // camera.zoom = 2;
     var renderer = new THREE.WebGLRenderer({
       antialias: true
     });
@@ -350,7 +363,7 @@ var App = (function() {
 
     this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, camera);
     console.log('Visible dimensions: ' + this.visibleDimensions.width + ' x ' + this.visibleDimensions.height);
-    camera.position.set(0, 0, this.opt.cameraDistance);
+    camera.position.set(0, 0, this.opt.minCameraDistance);
     camera.lookAt(anchor);
 
     var maxRotateDelta = this.opt.maxRotateDelta;
@@ -378,17 +391,28 @@ var App = (function() {
     this.$sliderText = $('#slider-text');
     this.$sliderPeople = $('.people');
     this.$sliderDo = $('.do');
+    this.previousValue = -1;
     this.currentValue = -1;
+    this.$slider = $('#slider');
 
-    this.slider = $('#slider').slider({
+    this.$slider.slider({
       min: _this.opt.minValue,
       max: _this.opt.maxValue,
-      value: _this.opt.number,
+      value: _this.opt.minValue,
       create: function(event, ui) {
-        _this.onSlide(_this.opt.number);
+        _this.onSlide(_this.opt.minValue);
       },
       slide: function(event, ui) {
+        if (_this.isTransitioningIn) {
+          event.stopPropagation();
+          return false;
+        }
         _this.onSlide(ui.value, true);
+      },
+      change: function(event, ui) {
+        if (_this.isTransitioningIn) {
+          _this.onSlide(ui.value, true);
+        }
       }
     });
   };
@@ -404,6 +428,21 @@ var App = (function() {
     }, this.opt.waitAudioMs);
   };
 
+  App.prototype.moveCamera = function(){
+    if (!this.cameraTransitioning) return;
+
+    var now = new Date().getTime();
+    var t = norm(now, this.cameraTransitionStart, this.cameraTransitionEnd);
+    t = ease(t);
+
+    var cameraZ = lerp(this.cameraZStart, this.cameraZEnd, t);
+    this.camera.position.setZ(cameraZ);
+
+    if (t >= 1) {
+      this.cameraTransitioning = false;
+    }
+  };
+
   App.prototype.onResize = function(){
     var $el = this.$scene;
     var w = $el.width();
@@ -417,13 +456,6 @@ var App = (function() {
     this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, this.camera);
 
     this.renderNeeded = true;
-  };
-
-  App.prototype.onPointChange = function(pageX, pageY){
-    var nx = pageX / this.viewW;
-    var ny = pageY / this.viewH;
-    this.npointer.x = nx * 2 - 1;
-    this.npointer.y = -ny * 2 + 1;
   };
 
   App.prototype.onSlide = function(newValue, playSound){
@@ -444,6 +476,7 @@ var App = (function() {
 
     this.$sliderText.text(formatNumber(newValue));
     this.currentValue = newValue;
+    this.peopleRenderNeeded = true;
 
     if (playSound) this.throttleSound();
   };
@@ -451,7 +484,10 @@ var App = (function() {
   App.prototype.render = function(){
     var _this = this;
 
-    // this.moveCameraWithPointer();
+    this.renderTransitionIn();
+    var renderNeeded = this.renderPeople();
+    this.moveCamera();
+
     this.renderer.render(this.scene, this.camera);
     this.controls.update();
 
@@ -460,20 +496,69 @@ var App = (function() {
     });
   };
 
-  App.prototype.moveCameraWithPointer = function(){
-    var anchor = this.anchor;
-    var camera = this.camera;
+  App.prototype.renderPeople = function(){
+    if (!this.peopleRenderNeeded) return;
 
-    var lookDistance = this.opt.lookDistance;
-    var lookDelta = lookDistance * this.camera.position.z;
-    lookDelta = 0.0001;
+    var quantity = this.currentValue;
+    var geometry = this.geometry;
+    var alphaArr = geometry.getAttribute('alpha').array;
+    for (var i=0; i<this.opt.maxValue; i++) {
+      if (i < quantity) alphaArr[i] = 1;
+      else alphaArr[i] = 0;
+    }
+    geometry.getAttribute('alpha').needsUpdate = true;
+    geometry.getAttribute('translate').needsUpdate = true;
 
-    var deltaX = this.npointer.x * lookDelta;
-    var deltaY = this.npointer.y * lookDelta;
+    // move camera to accommodate people
+    // var visibleDimensions = this.visibleDimensions;
+    // var extentsArr = this.extentsArr;
+    // var i = quantity - 1;
+    // var targetWidth = extentsArr[i*2] * visibleDimensions.width;
+    // var targetHeight = extentsArr[i*2 + 1] * visibleDimensions.height;
+    // var targetZ = getCameraDistanceToFitDimensions(this.camera, targetWidth, targetHeight);
+    var nTargetDistance = norm(quantity, this.opt.minValue, this.opt.maxValue);
+    nTargetDistance = easeOutExp(nTargetDistance, 2);
+    var targetZ = lerp(this.opt.minCameraDistance, this.opt.cameraDistance, nTargetDistance);
+    this.cameraTransitionStart = new Date().getTime();
+    this.cameraTransitionEnd = this.cameraTransitionStart + this.opt.cameraMoveDuration;
+    this.cameraZEnd = targetZ;
+    this.cameraZStart = this.camera.position.z;
+    this.cameraTransitioning = true;
 
-    camera.position.setX(deltaX);
-    camera.position.setY(deltaY);
-    camera.lookAt(anchor);
+    this.peopleRenderNeeded = false;
+  };
+
+  App.prototype.renderTransitionIn = function(){
+    if (!this.isTransitioningIn) return;
+
+    var now = new Date().getTime();
+    var t = norm(now, this.transitionInStart, this.transitionInEnd);
+    t = ease(t);
+
+    var quantity = lerp(this.transitionInStartQuantity, this.transitionInEndQuantity, t);
+    quantity = Math.round(quantity);
+
+    this.$slider.slider('value', quantity);
+
+    if (t >= 1) this.isTransitioningIn = false;
+  }
+
+  App.prototype.toggle = function($button){
+    var $parent = $button.parent();
+
+    $parent.toggleClass('active');
+
+    var isActive = $parent.hasClass('active');
+    if (isActive) $button.text('Hide panel');
+    else $button.text('Show panel');
+  };
+
+  App.prototype.transitionIn = function(){
+    this.isTransitioningIn = true;
+    this.transitionInStart = new Date().getTime();
+    this.transitionInEnd = this.transitionInStart + this.opt.transitionInDuration;
+    this.transitionInStartQuantity = this.currentValue;
+    this.transitionInEndQuantity = this.opt.number;
   };
 
   return App;

@@ -60,6 +60,12 @@ p {
   box-sizing: border-box;
   background: rgba(0,0,0,0.8);
   border-top: 1px solid #444;
+  display: block;
+  transform: translate3d(0, 100%, 0);
+  transition: transform 0.5s;
+}
+.content.active {
+  transform: translate3d(0, 0, 0);
 }
 
 .slider-container {
@@ -94,4 +100,21 @@ p {
 .ui-slider .ui-slider-handle:focus {
   background: #aaa;
   border-color: #eb4034;
+}
+
+.toggle-panel {
+  background: #9c2f27;
+  color: white;
+  border: none;
+  display: block;
+  padding: 0 1rem;
+  position: absolute;
+  height: 30px;
+  line-height: 30px;
+  top: -30px;
+  right: 10px;
+  cursor: pointer;
+}
+.toggle-panel:hover {
+  background: #d64338;
 }
