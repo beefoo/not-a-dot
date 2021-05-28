@@ -78,26 +78,30 @@ p {
 }
 .content h2 {
   background: rgba(0,0,0,0.9);
-  display: inline-block;
+  display: block;
   padding: 0.5rem 1rem 1.5rem;
   border-radius: 10px;
-}
-
-.slider-container {
-  display: inline-block;
   vertical-align: middle;
-  width: 260px;
+  max-width: 840px;
+  margin: 0 auto 60px;
+}
+.slider-container {
+  display: block;
+  vertical-align: middle;
+  width: 100%;
+  max-width: 840px;
   white-space: nowrap;
+  margin: -80px auto 30px;
 }
 
 .slider-input {
   background: transparent;
   border: none;
   color: white;
-  margin-bottom: 1rem;
   border: 1px solid transparent;
-  width: 100%;
+  width: 192px;
   font-weight: bold;
+  display: inline-block;
 }
 .slider-input:focus {
   border-color: #eb4034;
