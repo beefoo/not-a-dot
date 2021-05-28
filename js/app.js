@@ -413,7 +413,7 @@ var App = (function() {
           event.stopPropagation();
           return false;
         }
-        _this.onSlide(ui.value, true);
+        _this.onSlide(ui.value, true, false, true);
       },
       change: function(event, ui) {
         if (_this.isTransitioningIn) {
@@ -464,7 +464,7 @@ var App = (function() {
     this.renderNeeded = true;
   };
 
-  App.prototype.onSlide = function(newValue, playSound, fromInput){
+  App.prototype.onSlide = function(newValue, playSound, fromInput, shouldUpdateUrl){
     newValue = parseInt(newValue);
     if (newValue < this.opt.minValue) newValue = this.opt.minValue;
     if (newValue > this.opt.maxValue) newValue = this.opt.maxValue;
@@ -485,6 +485,7 @@ var App = (function() {
     this.peopleRenderNeeded = true;
 
     if (playSound) this.throttleSound();
+    if (shouldUpdateUrl) this.updateURL();
   };
 
   App.prototype.onUserInput = function(userValue){
@@ -493,7 +494,7 @@ var App = (function() {
     if (isNaN(value)) value = this.opt.number;
 
     this.$slider.slider('value', value);
-    this.onSlide(value, true, true);
+    this.onSlide(value, true, true, true);
   };
 
   App.prototype.render = function(){
@@ -575,6 +576,27 @@ var App = (function() {
     this.transitionInEnd = this.transitionInStart + this.opt.transitionInDuration;
     this.transitionInStartQuantity = this.currentValue;
     this.transitionInEndQuantity = this.opt.number;
+  };
+
+  App.prototype.updateURL = function(){
+    if (window.history.pushState) {
+      var params = {number: this.currentValue};
+      var queryString = $.param(params);
+      var baseUrl = window.location.href.split('?')[0];
+      var currentState = window.history.state;
+      var newUrl = baseUrl + '?' + queryString;
+
+      // ignore if state is the same
+      if (currentState) {
+        var currentUrl = baseUrl + '?' + $.param(currentState);
+        if (newUrl === currentUrl) return;
+      }
+
+      window.historyInitiated = true;
+      // console.log('Updating url', newUrl);
+      window.history.replaceState(params, '', newUrl);
+      // window.history.pushState(data, '', newUrl);
+    }
   };
 
   return App;
