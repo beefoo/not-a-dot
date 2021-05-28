@@ -49,6 +49,21 @@ p {
   left: 0;
 }
 
+.info {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.9);
+  color: white;
+  width: 375px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  border-radius: 5px;
+}
+.info p {
+  font-size: 0.8rem;
+}
+
 .content {
   position: absolute;
   z-index: 10;
@@ -58,14 +73,14 @@ p {
   height: auto;
   padding: 1rem 1rem 0.5rem;
   box-sizing: border-box;
-  background: rgba(0,0,0,0.8);
-  border-top: 1px solid #444;
+  text-align: center;
   display: block;
-  transform: translate3d(0, 100%, 0);
-  transition: transform 0.5s;
 }
-.content.active {
-  transform: translate3d(0, 0, 0);
+.content h2 {
+  background: rgba(0,0,0,0.9);
+  display: inline-block;
+  padding: 0.5rem 1rem 1.5rem;
+  border-radius: 10px;
 }
 
 .slider-container {
@@ -73,6 +88,20 @@ p {
   vertical-align: middle;
   width: 260px;
   white-space: nowrap;
+}
+
+.slider-input {
+  background: transparent;
+  border: none;
+  color: white;
+  margin-bottom: 1rem;
+  border: 1px solid transparent;
+  width: 100%;
+  font-weight: bold;
+}
+.slider-input:focus {
+  border-color: #eb4034;
+  outline: none;
 }
 
 .ui-slider-horizontal {

@@ -190,6 +190,10 @@ var App = (function() {
     $('.toggle-panel').on('click', function(e){
       _this.toggle($(this));
     });
+
+    this.$sliderInput.on('input', function(e){
+      _this.onUserInput($(this).val());
+    });
   };
 
   App.prototype.loadPositions = function(count){
@@ -388,7 +392,7 @@ var App = (function() {
   App.prototype.loadSlider = function(){
     var _this = this;
 
-    this.$sliderText = $('#slider-text');
+    this.$sliderInput = $('#slider-input');
     this.$sliderPeople = $('.people');
     this.$sliderDo = $('.do');
     this.previousValue = -1;
@@ -458,7 +462,7 @@ var App = (function() {
     this.renderNeeded = true;
   };
 
-  App.prototype.onSlide = function(newValue, playSound){
+  App.prototype.onSlide = function(newValue, playSound, fromInput){
     newValue = parseInt(newValue);
     if (newValue < this.opt.minValue) newValue = this.opt.minValue;
     if (newValue > this.opt.maxValue) newValue = this.opt.maxValue;
@@ -474,11 +478,20 @@ var App = (function() {
       this.$sliderPeople.text('person');
     }
 
-    this.$sliderText.text(formatNumber(newValue));
+    if (!fromInput) this.$sliderInput.val(newValue);
     this.currentValue = newValue;
     this.peopleRenderNeeded = true;
 
     if (playSound) this.throttleSound();
+  };
+
+  App.prototype.onUserInput = function(userValue){
+    var value = parseInt(userValue);
+
+    if (isNaN(value)) value = this.opt.number;
+
+    this.$slider.slider('value', value);
+    this.onSlide(value, true, true);
   };
 
   App.prototype.render = function(){
