@@ -78,15 +78,24 @@ var App = (function() {
       targetCellW: 64,
       targetCellH: 64,
       cellCount: 42,
-      maxRotateDelta: Math.PI / 8,
-      rotateSpeed: 0.05,
       transitionInDuration: 500,
       cameraMoveDuration: 1000,
-      visibleDepth: 512
+      visibleDepth: 512,
+      lookDistanceX: 10,
+      lookDistanceY: 5,
+      lookDistanceZ: 100,
+      movePinchDelta: 10,
+      moveWheelDelta: 60
     };
     var q = queryParams();
     this.opt = _.extend({}, defaults, config, q);
     this.init();
+  }
+
+  function clamp(value, min, max) {
+    value = Math.min(value, max);
+    value = Math.max(value, min);
+    return value;
   }
 
   function ease(t){
@@ -196,6 +205,33 @@ var App = (function() {
     this.$sliderInput.on('input', function(e){
       _this.onUserInput($(this).val());
     });
+
+    $(document).on("mousemove", function(e){
+      _this.onPointChange(e.pageX, e.pageY);
+    });
+
+    this.$scene.on('wheel', function(e){
+      _this.onWheelChange(e.originalEvent.deltaY);
+    });
+
+    var el = this.$scene[0];
+
+    // var mc = new Hammer.Manager(el, {inputClass: Hammer.TouchInput}); // use this for touch emulation
+    var mc = new Hammer.Manager(el);
+    mc.add(new Hammer.Pan({ threshold: 0, pointers: 0 }));
+    mc.add(new Hammer.Pinch({ threshold: 0 })).recognizeWith(mc.get('pan'));
+    // var mc = new Hammer(el);
+    // mc.get('pan').set({ direction: Hammer.DIRECTION_ALL });
+    mc.on("panstart panmove press", function(e) {
+      _this.onPointChange(e.center.x, e.center.y);
+    });
+
+    var lastScale = -1;
+    mc.on("pinchstart pinchmove", function(e) {
+      if(e.type == 'pinchstart' || lastScale < 0) lastScale = e.scale;
+      _this.onPinch(e.scale - lastScale);
+    });
+
   };
 
   App.prototype.loadPositions = function(count){
@@ -282,8 +318,10 @@ var App = (function() {
     // set uv offset to random cell
     var uvOffsetArr = geometry.getAttribute('uvOffset').array;
     var yt = 1.0 / cols;
+    var firstPersonIndex = 6; // always make the first person this one
     for (var i=0; i<count; i++) {
       var randomIndex = _.random(0, cellCount-1);
+      if (i<=0) randomIndex = firstPersonIndex;
       var i0 = i*2;
       var y = parseInt(randomIndex / cols) / cols;
       var x = (randomIndex % cols) / cols;
@@ -361,33 +399,26 @@ var App = (function() {
     var renderer = new THREE.WebGLRenderer({
       antialias: true
     });
-    var anchor = new THREE.Vector3();
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setClearColor( 0x000000, 0.0 );
     renderer.setSize(w, h);
     $el.append(renderer.domElement);
 
     this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, camera);
+    this.opt.maxCameraDistance = getCameraDistanceToFitDimensions(camera, this.visibleDimensions.width, this.visibleDimensions.height);
     console.log('Visible dimensions: ' + this.visibleDimensions.width + ' x ' + this.visibleDimensions.height);
     camera.position.set(0, 0, this.opt.minCameraDistance);
-    camera.lookAt(anchor);
 
-    var maxRotateDelta = this.opt.maxRotateDelta;
-    var controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enablePan = false;
-    controls.minPolarAngle = Math.PI * 0.5 - maxRotateDelta; // radians
-  	controls.maxPolarAngle = Math.PI * 0.5 + maxRotateDelta; // radians
-  	controls.minAzimuthAngle = -maxRotateDelta; // radians
-  	controls.maxAzimuthAngle = maxRotateDelta; // radians
-    controls.rotateSpeed = this.opt.rotateSpeed;
+    var lookAt = camera.position.clone();
+    lookAt.sub(new THREE.Vector3(0, 0, this.opt.lookDistanceZ));
+    camera.lookAt(lookAt);
 
     this.viewW = w;
     this.viewH = h;
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
-    this.anchor = anchor;
-    this.controls = controls;
+    this.lookAt = lookAt;
   };
 
   App.prototype.loadSlider = function(){
@@ -441,11 +472,37 @@ var App = (function() {
     t = ease(t);
 
     var cameraZ = lerp(this.cameraZStart, this.cameraZEnd, t);
+    this.lookAt.setZ(cameraZ - this.opt.lookDistanceZ);
     this.camera.position.setZ(cameraZ);
 
     if (t >= 1) {
       this.cameraTransitioning = false;
     }
+  };
+
+  App.prototype.moveCameraDelta = function(deltaZ){
+    if (this.cameraTransitioning) return;
+
+    var newCameraZ = this.camera.position.z + deltaZ;
+
+    newCameraZ = clamp(newCameraZ, this.opt.minCameraDistance, this.opt.maxCameraDistance);
+
+    this.lookAt.setZ(newCameraZ - this.opt.lookDistanceZ);
+    this.camera.position.setZ(newCameraZ);
+  };
+
+  // negative delta = pinch in = zoom out
+  // positive delta = pinch out = zoom in
+  App.prototype.onPinch = function(delta){
+    var cameraDeltaZ = this.opt.movePinchDelta * delta;
+    this.moveCameraDelta(cameraDeltaZ);
+  };
+
+  App.prototype.onPointChange = function(x, y){
+    var nx = x / this.viewW;
+    var ny = y / this.viewH;
+    this.npointer.x = nx * 2 - 1;
+    this.npointer.y = -ny * 2 + 1;
   };
 
   App.prototype.onResize = function(){
@@ -459,6 +516,7 @@ var App = (function() {
     this.viewH = h;
 
     this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, this.camera);
+    this.opt.maxCameraDistance = getCameraDistanceToFitDimensions(this.camera, this.visibleDimensions.width, this.visibleDimensions.height);
 
     // update positions based on new visible dimensions
     var geometry = this.geometry;
@@ -511,15 +569,23 @@ var App = (function() {
     this.onSlide(value, true, true, true);
   };
 
+  // negative delta = zoom out
+  // positive delta = zoom in
+  App.prototype.onWheelChange = function(deltaY){
+    var moveZ = this.opt.moveWheelDelta;
+    if (deltaY > 0) moveZ = -moveZ;
+    this.moveCameraDelta(moveZ);
+  };
+
   App.prototype.render = function(){
     var _this = this;
 
     this.renderTransitionIn();
     this.renderPeople();
     this.moveCamera();
+    this.rotateCamera();
 
     this.renderer.render(this.scene, this.camera);
-    this.controls.update();
 
     requestAnimationFrame(function(){
       _this.render();
@@ -572,7 +638,18 @@ var App = (function() {
     this.$slider.slider('value', quantity);
 
     if (t >= 1) this.isTransitioningIn = false;
-  }
+  };
+
+  App.prototype.rotateCamera = function(){
+    var x = this.npointer.x * this.opt.lookDistanceX;
+    var y = this.npointer.y * this.opt.lookDistanceY;
+
+    // console.log(x, y);
+
+    this.lookAt.setX(x);
+    this.lookAt.setY(y);
+    this.camera.lookAt(this.lookAt);
+  };
 
   App.prototype.toggle = function($button){
     var $parent = $button.parent();
