@@ -84,7 +84,7 @@ var App = (function() {
       lookDistanceX: 10,
       lookDistanceY: 5,
       lookDistanceZ: 100,
-      movePinchDelta: 10,
+      movePinchDelta: 100,
       moveWheelDelta: 60
     };
     var q = queryParams();
@@ -491,10 +491,10 @@ var App = (function() {
     this.camera.position.setZ(newCameraZ);
   };
 
-  // negative delta = pinch in = zoom out
-  // positive delta = pinch out = zoom in
+  // positive delta = pinch in = zoom out
+  // negative delta = pinch out = zoom in
   App.prototype.onPinch = function(delta){
-    var cameraDeltaZ = this.opt.movePinchDelta * delta;
+    var cameraDeltaZ = - this.opt.movePinchDelta * delta;
     this.moveCameraDelta(cameraDeltaZ);
   };
 
