@@ -484,6 +484,8 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		rotateEnd.set( event.clientX, event.clientY );
 
+		// console.log(rotateStart);
+
 		rotateDelta.subVectors( rotateEnd, rotateStart ).multiplyScalar( scope.rotateSpeed );
 
 		var element = scope.domElement;
@@ -1138,7 +1140,14 @@ THREE.OrbitControls = function ( object, domElement ) {
 		button: 0,
 		clientX: scope.domElement.clientWidth * 0.5,
 		clientY: scope.domElement.clientHeight * 0.5
-	})
+	});
+	window.addEventListener('resize', function(){
+		handleMouseDownRotate({
+			clientX: scope.domElement.clientWidth * 0.5,
+			clientY: scope.domElement.clientHeight * 0.5
+		})
+	});
+
 	scope.domElement.addEventListener( 'wheel', onMouseWheel, false );
 
 	scope.domElement.addEventListener( 'touchstart', onTouchStart, false );

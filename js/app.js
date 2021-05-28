@@ -388,7 +388,6 @@ var App = (function() {
     this.renderer = renderer;
     this.anchor = anchor;
     this.controls = controls;
-    this.renderNeeded = true;
   };
 
   App.prototype.loadSlider = function(){
@@ -461,7 +460,22 @@ var App = (function() {
 
     this.visibleDimensions = visibleDimensionsAtDepth(this.opt.cameraDistance, this.camera);
 
-    this.renderNeeded = true;
+    // update positions based on new visible dimensions
+    var geometry = this.geometry;
+    var count = this.opt.maxValue;
+    var visibleW = this.visibleDimensions.width;
+    var visibleH = this.visibleDimensions.height;
+    var visibleDepth = Math.min(visibleH, visibleW, this.opt.visibleDepth);
+    var nPositionArr = this.nPositionArr;
+    var translateArr = geometry.getAttribute('translate').array;
+    for (var i=0; i<count; i++) {
+      var i0 = i*3;
+      translateArr[i0] = lerp(-visibleW*0.5, visibleW*0.5, nPositionArr[i0]);
+      translateArr[i0+1] = lerp(-visibleH*0.5, visibleH*0.5, nPositionArr[i0+1]);
+      translateArr[i0+2] = lerp(-visibleDepth, 0, nPositionArr[i0+2]);
+    }
+    geometry.getAttribute('translate').needsUpdate = true;
+    this.peopleRenderNeeded = true;
   };
 
   App.prototype.onSlide = function(newValue, playSound, fromInput, shouldUpdateUrl){
@@ -501,7 +515,7 @@ var App = (function() {
     var _this = this;
 
     this.renderTransitionIn();
-    var renderNeeded = this.renderPeople();
+    this.renderPeople();
     this.moveCamera();
 
     this.renderer.render(this.scene, this.camera);
