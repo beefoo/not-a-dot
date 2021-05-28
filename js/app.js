@@ -569,11 +569,11 @@ var App = (function() {
     this.onSlide(value, true, true, true);
   };
 
-  // negative delta = zoom out
-  // positive delta = zoom in
+  // negative delta = zoom in
+  // positive delta = zoom out
   App.prototype.onWheelChange = function(deltaY){
     var moveZ = this.opt.moveWheelDelta;
-    if (deltaY > 0) moveZ = -moveZ;
+    if (deltaY < 0) moveZ = -moveZ;
     this.moveCameraDelta(moveZ);
   };
 
@@ -662,6 +662,7 @@ var App = (function() {
   };
 
   App.prototype.transitionIn = function(){
+    $('.content').addClass('active');
     this.isTransitioningIn = true;
     this.transitionInStart = new Date().getTime();
     this.transitionInEnd = this.transitionInStart + this.opt.transitionInDuration;

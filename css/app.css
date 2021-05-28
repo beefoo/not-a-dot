@@ -74,7 +74,13 @@ p {
   padding: 1rem 1rem 0.5rem;
   box-sizing: border-box;
   text-align: center;
+  display: none;
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+}
+.content.active {
   display: block;
+  opacity: 1;
 }
 .content h2 {
   background: rgba(0,0,0,0.9);
