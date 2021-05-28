@@ -107,8 +107,10 @@ var App = (function() {
     var fov = camera.fov * ( Math.PI / 180 );
 
     // Calculate the camera distance
-    var size = Math.min(width, height);
-    var distance = Math.abs( size / Math.sin( fov / 2 ) );
+    var size = Math.max(width, height);
+    // var distance = Math.abs( size / Math.sin( fov / 2 ) );
+    var offset = 0.75; // increase this to zoom out, decrease to zoom in
+    var distance = Math.abs( size * offset * Math.tan( fov * 2 ) );
     return distance;
   }
 
@@ -523,15 +525,16 @@ var App = (function() {
     geometry.getAttribute('translate').needsUpdate = true;
 
     // move camera to accommodate people
-    // var visibleDimensions = this.visibleDimensions;
-    // var extentsArr = this.extentsArr;
-    // var i = quantity - 1;
-    // var targetWidth = extentsArr[i*2] * visibleDimensions.width;
-    // var targetHeight = extentsArr[i*2 + 1] * visibleDimensions.height;
-    // var targetZ = getCameraDistanceToFitDimensions(this.camera, targetWidth, targetHeight);
-    var nTargetDistance = norm(quantity, this.opt.minValue, this.opt.maxValue);
-    nTargetDistance = easeOutExp(nTargetDistance, 2);
-    var targetZ = lerp(this.opt.minCameraDistance, this.opt.cameraDistance, nTargetDistance);
+    var visibleDimensions = this.visibleDimensions;
+    var extentsArr = this.extentsArr;
+    var i = quantity - 1;
+    var targetWidth = extentsArr[i*2] * visibleDimensions.width;
+    var targetHeight = extentsArr[i*2 + 1] * visibleDimensions.height;
+    var targetZ = getCameraDistanceToFitDimensions(this.camera, targetWidth, targetHeight);
+    // var nTargetDistance = norm(quantity, this.opt.minValue, this.opt.maxValue);
+    // nTargetDistance = easeOutExp(nTargetDistance, 2);
+    // var targetZ = lerp(this.opt.minCameraDistance, this.opt.cameraDistance, nTargetDistance);
+    targetZ = Math.max(targetZ, this.opt.minCameraDistance);
     this.cameraTransitionStart = new Date().getTime();
     this.cameraTransitionEnd = this.cameraTransitionStart + this.opt.cameraMoveDuration;
     this.cameraZEnd = targetZ;
