@@ -226,10 +226,14 @@ var App = (function() {
       _this.onPointChange(e.center.x, e.center.y);
     });
 
-    var lastScale = -1;
+    var startScale = -1;
+    var startZ = -1;
     mc.on("pinchstart pinchmove", function(e) {
-      if(e.type == 'pinchstart' || lastScale < 0) lastScale = e.scale;
-      _this.onPinch(e.scale - lastScale);
+      if(e.type == 'pinchstart' || startScale < 0) {
+        startScale = e.scale;
+        startZ = _this.camera.position.z;
+      }
+      _this.onPinch(e.scale - startScale, startZ);
     });
 
   };
@@ -487,15 +491,24 @@ var App = (function() {
 
     newCameraZ = clamp(newCameraZ, this.opt.minCameraDistance, this.opt.maxCameraDistance);
 
+    this.moveCameraToZ(newCameraZ);
+
+
+  };
+
+  App.prototype.moveCameraToZ = function(newCameraZ){
+    if (this.cameraTransitioning) return;
+
     this.lookAt.setZ(newCameraZ - this.opt.lookDistanceZ);
     this.camera.position.setZ(newCameraZ);
   };
 
   // positive delta = pinch in = zoom out
   // negative delta = pinch out = zoom in
-  App.prototype.onPinch = function(delta){
-    var cameraDeltaZ = - this.opt.movePinchDelta * delta;
-    this.moveCameraDelta(cameraDeltaZ);
+  App.prototype.onPinch = function(delta, startCameraZ){
+    var cameraDeltaZ = this.opt.movePinchDelta * delta;
+    var newCameraZ = startCameraZ - cameraDeltaZ;
+    this.moveCameraToZ(newCameraZ);
   };
 
   App.prototype.onPointChange = function(x, y){
