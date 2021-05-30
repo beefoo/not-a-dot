@@ -45,13 +45,13 @@ var MaterialFragmentShader = `
 
   void main() {
     //fog
-    float depth = gl_FragCoord.z / gl_FragCoord.w;
-    float d = clamp( 0., 1., pow( depth * ( 1./fogDistance ), 2. ) );
-    if( d >= 1. ) discard;
+    //float depth = gl_FragCoord.z / gl_FragCoord.w;
+    //float d = clamp( 0., 1., pow( depth * ( 1./fogDistance ), 2. ) );
+    //if( d >= 1. ) discard;
 
     vec4 diffuseColor = texture2D(map, vUv);
     gl_FragColor = diffuseColor;
-    gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, d );
+    //gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, d );
     // gl_FragColor.a = vAlpha;
 
     if ( gl_FragColor.a < 0.5 || vAlpha < 0.1) discard;
@@ -84,8 +84,8 @@ var App = (function() {
       lookDistanceX: 10,
       lookDistanceY: 5,
       lookDistanceZ: 100,
-      movePinchDelta: 100,
-      moveWheelDelta: 60
+      movePinchDelta: 250,
+      moveWheelDelta: 80
     };
     var q = queryParams();
     this.opt = _.extend({}, defaults, config, q);
@@ -193,6 +193,7 @@ var App = (function() {
 
   App.prototype.loadListeners = function(){
     var _this = this;
+    this.isTouching = false;
 
     $(window).on('resize', function(){
       _this.onResize();
@@ -223,7 +224,11 @@ var App = (function() {
     // var mc = new Hammer(el);
     // mc.get('pan').set({ direction: Hammer.DIRECTION_ALL });
     mc.on("panstart panmove press", function(e) {
+      _this.isTouching = true;
       _this.onPointChange(e.center.x, e.center.y);
+    });
+    mc.on("panend", function(e) {
+      _this.isTouching = false;
     });
 
     var startScale = -1;
@@ -654,8 +659,10 @@ var App = (function() {
   };
 
   App.prototype.rotateCamera = function(){
-    var x = this.npointer.x * this.opt.lookDistanceX;
-    var y = this.npointer.y * this.opt.lookDistanceY;
+    var multiplier = this.isTouching ? -1 : 1; // reverse it if touching
+
+    var x = multiplier * this.npointer.x * this.opt.lookDistanceX;
+    var y = multiplier * this.npointer.y * this.opt.lookDistanceY;
 
     // console.log(x, y);
 
