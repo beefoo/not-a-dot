@@ -203,10 +203,6 @@ var App = (function() {
       _this.toggle($(this));
     });
 
-    this.$sliderInput.on('input', function(e){
-      _this.onUserInput($(this).val());
-    });
-
     $(document).on("mousemove", function(e){
       _this.onPointChange(e.pageX, e.pageY);
     });
@@ -440,26 +436,38 @@ var App = (function() {
     this.currentValue = -1;
     this.$slider = $('#slider');
 
-    this.$slider.slider({
-      min: _this.opt.minValue,
-      max: _this.opt.maxValue,
-      value: _this.opt.minValue,
-      create: function(event, ui) {
-        _this.onSlide(_this.opt.minValue);
-      },
-      slide: function(event, ui) {
-        if (_this.isTransitioningIn) {
-          event.stopPropagation();
-          return false;
-        }
-        _this.onSlide(ui.value, true, false, true);
-      },
-      change: function(event, ui) {
-        if (_this.isTransitioningIn) {
-          _this.onSlide(ui.value, true);
-        }
+    this.$slider.on('input', function(e){
+      if (_this.isTransitioningIn) {
+        e.stopPropagation();
+        return false;
       }
+      _this.onSlide($(this).val(), true, false, true);
     });
+
+    this.$sliderInput.on('input', function(e){
+      _this.onUserInput($(this).val());
+    });
+
+    // this.$slider.slider({
+    //   min: _this.opt.minValue,
+    //   max: _this.opt.maxValue,
+    //   value: _this.opt.minValue,
+    //   create: function(event, ui) {
+    //     _this.onSlide(_this.opt.minValue);
+    //   },
+    //   slide: function(event, ui) {
+    //     if (_this.isTransitioningIn) {
+    //       event.stopPropagation();
+    //       return false;
+    //     }
+    //     _this.onSlide(ui.value, true, false, true);
+    //   },
+    //   change: function(event, ui) {
+    //     if (_this.isTransitioningIn) {
+    //       _this.onSlide(ui.value, true);
+    //     }
+    //   }
+    // });
   };
 
   App.prototype.loadSound = function(){
@@ -583,7 +591,7 @@ var App = (function() {
 
     if (isNaN(value)) value = this.opt.number;
 
-    this.$slider.slider('value', value);
+    this.$slider.val(value);
     this.onSlide(value, true, true, true);
   };
 
@@ -653,7 +661,9 @@ var App = (function() {
     var quantity = lerp(this.transitionInStartQuantity, this.transitionInEndQuantity, t);
     quantity = Math.round(quantity);
 
-    this.$slider.slider('value', quantity);
+    this.$slider.val(quantity);
+    this.$sliderInput.val(quantity);
+    this.onSlide(quantity, true, false, false);
 
     if (t >= 1) this.isTransitioningIn = false;
   };

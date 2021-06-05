@@ -13,7 +13,7 @@
   <meta name="image_src" content="https://beefoo.github.io/not-a-dot/img/not_a_dot_by_brian_foo.jpg" />
 
   <link rel="stylesheet" href="css/vendor/normalize.css">
-  <link rel="stylesheet" href="css/vendor/jquery-ui.min.css">
+  <!-- <link rel="stylesheet" href="css/vendor/jquery-ui.min.css"> -->
   <link rel="stylesheet" href="css/app.css">
 
   <!-- <script src="js/vendor/touch-emulator.js"></script>
@@ -28,23 +28,21 @@
   <div id="app" class="app">
     <div id="scene" class="scene"></div>
     <div id="info" class="info">
-      <p><em>Not a Dot</em> is an experiment by <a href="https://brianfoo.com">Brian Foo</a> that attempts to simply visualize large numbers of people using images of people instead of dots, bars, or lines.</p>
+      <p><em>Not a Dot</em> is an experiment by <a href="https://brianfoo.com">Brian Foo</a> that attempts to simply visualize large numbers of people using images of people instead of dots, bars, or lines. <br /><em class="note">Note: Due to the high volume of images, this is best experienced on a device with a good graphics card.</em></p>
     </div>
     <div id="content" class="content">
       <h2>
         What <span class="do">do</span>
-        <input id="slider-input" class="slider-input" type="number" min="1" max="1000000" />
+        <input id="slider-input" class="slider-input" type="number" min="1" max="1000000" value="1" />
         <span class="people">people</span> look like?
       </h2>
       <div class="slider-container">
-        <div id="slider" class="slider"></div>
+        <input id="slider" class="slider" type="range" min="1" max="1000000" value="1" />
       </div>
     </div>
   </div>
 
   <script src="js/vendor/jquery-3.5.1.min.js"></script>
-  <script src="js/vendor/jquery-ui-slider.min.js"></script>
-  <script src="js/vendor/jquery.ui.touch-punch.min.js"></script>
   <script src="js/vendor/hammer.min.js"></script>
   <script src="js/vendor/underscore-min.js"></script>
   <script src="js/vendor/three-r125.min.js"></script>
