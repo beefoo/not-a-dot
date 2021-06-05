@@ -188,6 +188,7 @@ var App = (function() {
     $.when(ready).done(function(){
       _this.transitionIn();
       _this.render();
+      $('.loading').removeClass('active');
     });
   };
 
