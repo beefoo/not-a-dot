@@ -64,7 +64,7 @@ var App = (function() {
     var defaults = {
       minValue: 1,
       maxValue: 1000000,
-      number: 500000,
+      number: 10000,
       minCameraDistance: 100,
       cameraDistance: 4000,
       audioFile: 'audio/octave/tap-resonant.mp3',
